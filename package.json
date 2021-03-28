@@ -14,9 +14,12 @@
   "dependencies": {
     "aws-sdk": "^2.873.0",
     "bluebird": "^3.7.2",
+    "cheerio": "^1.0.0-rc.5",
     "cors": "^2.8.5",
     "express": "^4.17.1",
-    "redis": "^3.0.2"
+    "node-fetch": "^2.6.1",
+    "redis": "^3.0.2",
+    "url-join": "^4.0.1"
   },
   "devDependencies": {
     "env-cmd": "^10.1.0",
