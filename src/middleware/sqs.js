@@ -1,15 +1,16 @@
 const { sqs } = require('../utils/sqs');
 
 const createQueue = async (req, res, next) => {
-    const QueueName = 'queue5.fifo'; //
+    const QueueName = 'queue35.fifo'; //
     try {
         const data = await sqs.createQueue({
             QueueName,
             Attributes: {
-                FifoQueue: 'true'
+                FifoQueue: 'true',
+                ContentBasedDeduplication: 'true'
             }
         }).promise();
-        req.queueUrl = data.QueueUrl;
+        req.queueUrl = data.QueueUrl; // Do this in redis
 
         next();
     } catch (err) {
