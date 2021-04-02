@@ -12,12 +12,21 @@ const getAllLinksInPage = async (url) => {
     
         $('a').each((index, element) => {
             let hrefVal = $(element).attr('href');
-            if (!!hrefVal && (hrefVal[0] === '/' || hrefVal.slice(0, 2) === './')) {
+            if (!hrefVal) return;
+                
+            if (hrefVal[0] === '/') { // This means that the path afterwards is added to the core site's url (instead of the current path)
+                let endOfCoreSiteUrlIndex = url.indexOf('/', 8);
+                let modifiedUrl = url;
+                if (endOfCoreSiteUrlIndex !== -1) { // If the parent url does end with a - /
+                    modifiedUrl = url.slice(0, endOfCoreSiteUrlIndex);
+                }
+                hrefVal = urlJoin(modifiedUrl, hrefVal);
+            } else if (hrefVal.slice(0, 2) === './') {
                 hrefVal = urlJoin(url, hrefVal);
                 hrefVal = hrefVal.replace('/./', '/');
                 hrefVal = hrefVal.replace('./', '/');
             }
-            else if (hrefVal == undefined || hrefVal.slice(0, 4) !== 'http') return;
+            else if (hrefVal.slice(0, 4) !== 'http') return;
     
             links.push(hrefVal);
         });

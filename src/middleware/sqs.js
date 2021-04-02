@@ -1,8 +1,38 @@
 const { sqs } = require('../utils/sqs');
 
-const createQueue = async (req, res, next) => {
-    const QueueName = 'queue35.fifo'; //
+let queue = 'queue61.fifo';
+
+const getQueueUrl = async (req, res, next) => {
+    const QueueName = req.body.queueName || queue;
     try {
+        if (!QueueName) {
+            throw new Error('Missing queue name in the request');
+        }
+
+        const data = await sqs.getQueueUrl({
+            QueueName
+        }).promise();
+
+        throw new Error('Queue already exists');
+    } catch (err) {
+        // If it fails it means the queue does not exist (which is good)
+        if (err.code === 'AWS.SimpleQueueService.NonExistentQueue') next();
+        else {
+            console.log(err.message);
+            res.status(400).send({
+                message: err.message
+            });
+        }
+    }
+}
+
+const createQueue = async (req, res, next) => {
+    const QueueName = req.body.queueName || queue; //
+    try {
+        if (!QueueName) {
+            throw new Error('Missing queue name in the request');
+        }
+
         const data = await sqs.createQueue({
             QueueName,
             Attributes: {
@@ -14,7 +44,10 @@ const createQueue = async (req, res, next) => {
 
         next();
     } catch (err) {
-        console.log(err);
+        console.log(err.message);
+        res.status(400).send({
+            message: err.message
+        });
     }
 }
 
@@ -90,6 +123,7 @@ const deleteQueue = async (req, res, next) => {
 }
 
 module.exports = {
+    getQueueUrl,
     createQueue,
     deleteQueue
 };
