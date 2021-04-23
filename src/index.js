@@ -10,6 +10,8 @@ app.use(express.json());
 
 app.use(crawlerRouter);
 
+// TODO: interval to check if crawling is finished, if so remove it from queueUrl and queueNames lists in redis
+
 app.listen(port, () => {
     console.log('Server connected to port: ' + port);
 });
