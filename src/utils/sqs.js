@@ -5,6 +5,22 @@ const sqs = new AWS.SQS({
     region: process.env.AWS_REGION
 });
 
+const getFifoQueueUrl = async (QueueName) => {
+    if (QueueName.slice(QueueName.length - 5) !== '.fifo') QueueName += '.fifo';
+    try {
+        const data = await sqs.getQueueUrl({
+            QueueName
+        }).promise();
+
+        return data.QueueUrl;
+    } catch (err) {
+        throw ({
+            message: err.message,
+            code: err.code
+        });
+    }
+}
+
 const deleteQueue = async (QueueUrl) => {
     try {
         await sqs.deleteQueue({ QueueUrl }).promise();
@@ -14,4 +30,4 @@ const deleteQueue = async (QueueUrl) => {
     }
 }
 
-module.exports = deleteQueue;
+module.exports = { sqs, getFifoQueueUrl, deleteQueue };

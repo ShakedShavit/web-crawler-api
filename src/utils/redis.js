@@ -1,8 +1,8 @@
 const redisClient = require('../db/redis');
 
-const deleteKeysInRedis = async () => {
+const deleteKeysInRedis = async (keysArr) => {
     try {
-        await redisClient.delAsync(...arguments);
+        await redisClient.delAsync(...keysArr);
     } catch (err) {
         throw new Error(err.message);
     }
@@ -32,7 +32,9 @@ const appendElementsToListInRedis = async (key, elementsArr) => {
 
 const removeElementFromListInRedis = async (key, element, count = 0) => {
     try {
-        await redisClient.lremAsync(key, count, element);
+        console.log(key, count, element)
+        let a = await redisClient.lremAsync(key, count, element);
+        console.log(a);
     } catch (err) {
         throw new Error(err.message);
     }

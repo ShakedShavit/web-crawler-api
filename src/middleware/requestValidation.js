@@ -1,6 +1,6 @@
 const validateCrawlReqData = (req, res, next) => {
     const queueName = req.body.queueName;
-    const rootUrl = req.body.messageBody;
+    const rootUrl = req.body.rootUrl;
     const maxDepth = req.body.maxDepth;
     const maxPages = req.body.maxPages;
 

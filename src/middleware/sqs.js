@@ -1,26 +1,37 @@
-const { sqs } = require('../utils/sqs');
+const { sqs, getFifoQueueUrl } = require('../utils/sqs');
 
-const getQueueUrl = async (req, res, next) => {
-    const QueueName = req.body.queueName;
+const doesQueueExist = async (req, res, next) => {
     try {
-        if (!QueueName) {
-            throw new Error('Missing queue name in the request');
-        }
+        await getFifoQueueUrl(req.queueName);
 
-        const data = await sqs.getQueueUrl({
-            QueueName
-        }).promise();
-
-        throw new Error('Queue already exists');
+        throw new Error('queue already exists');
     } catch (err) {
-        // If it fails it means the queue does not exist (which is what you want)
-        if (err.code === 'AWS.SimpleQueueService.NonExistentQueue') next();
-        else {
-            console.log(err.message);
-            res.status(400).send({
+        if (err.code !== 'AWS.SimpleQueueService.NonExistentQueue') {
+            console.log(err.message, '14');
+            return res.status(400).send({
+                status: 400,
                 message: err.message
             });
         }
+        else next(); // If queue does not exist
+    }
+}
+
+const getQueueUrl = async (req, res, next) => {
+    const queueName = req.body.queueName;
+    try {
+        if (!queueName) throw new Error('missing queue name in the request');
+        req.queueName = queueName;
+        req.queueUrl = await getFifoQueueUrl(queueName);
+        next();
+    } catch (err) {
+        let errMessage = err.message;
+        if (err.code === 'AWS.SimpleQueueService.NonExistentQueue') errMessage = 'queue does not exist';
+        console.log(err, '32');
+        res.status(400).send({
+            status: 400,
+            message: errMessage
+        });
     }
 }
 
@@ -30,7 +41,7 @@ const createQueue = async (req, res, next) => {
             QueueName: `${req.queueName}.fifo`,
             Attributes: {
                 FifoQueue: 'true',
-                ContentBasedDeduplication: 'true'
+                // ContentBasedDeduplication: 'true'
             }
         }).promise();
         req.queueUrl = data.QueueUrl; // Do this in redis
@@ -49,13 +60,18 @@ const sendMessageToQueue = async (req, res, next) => {
     try {
         await sqs.sendMessage({
             QueueUrl: req.queueUrl,
-            // MessageAttributes: {
-            //     'level': {
-            //         DataType: 'Number',
-            //         StringValue: `${level}`
-            //     }
-            // },
+            MessageAttributes: {
+                'level': {
+                    DataType: 'Number',
+                    StringValue: '0'
+                },
+                'parentUrl': {
+                    DataType: 'String',
+                    StringValue: '0'
+                }
+            },
             MessageBody: req.rootUrl,
+            MessageDeduplicationId: `${req.rootUrl},0`,
             MessageGroupId: '0' // Root url level is 0
         }).promise();
 
@@ -70,6 +86,7 @@ const sendMessageToQueue = async (req, res, next) => {
 }
 
 module.exports = {
+    doesQueueExist,
     getQueueUrl,
     createQueue,
     sendMessageToQueue
