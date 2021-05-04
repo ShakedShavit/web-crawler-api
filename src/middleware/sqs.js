@@ -57,6 +57,9 @@ const createQueue = async (req, res, next) => {
 }
 
 const sendMessageToQueue = async (req, res, next) => {
+    let MessageDeduplicationId = `${req.rootUrl},0,0`;
+    deduplicationLength = MessageDeduplicationId.length;
+    if (deduplicationLength > 128) MessageDeduplicationId = MessageDeduplicationId.slice(deduplicationLength - 128);
     try {
         await sqs.sendMessage({
             QueueUrl: req.queueUrl,
@@ -71,7 +74,7 @@ const sendMessageToQueue = async (req, res, next) => {
                 }
             },
             MessageBody: req.rootUrl,
-            MessageDeduplicationId: `${req.rootUrl},0`,
+            MessageDeduplicationId,
             MessageGroupId: '0' // Root url level is 0
         }).promise();
 
