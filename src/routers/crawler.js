@@ -85,12 +85,12 @@ router.get('/get-tree', getQueueUrl, async (req, res) => {
     const redisCrawlHashKey = getHashKeyForQueueUrl(req.queueUrl);
 
     try {
-        const [isCrawlingDone, treeJSON] = await getHashValuesFromRedis(redisCrawlHashKey, ['isCrawlingDone', 'tree']);
+        let [isCrawlingDone, treeJSON] = await getHashValuesFromRedis(redisCrawlHashKey, ['isCrawlingDone', 'tree']);
 
         if (isCrawlingDone === 'true') {
             await deleteQueueSequence(req.queueUrl, redisCrawlHashKey);
         }
-
+        
         res.status(200).send({tree: treeJSON, isCrawlingDone});
     } catch (err) {
         console.log(err.message, '97');

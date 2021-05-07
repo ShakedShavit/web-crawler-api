@@ -18,7 +18,7 @@ const doesQueueExist = async (req, res, next) => {
 }
 
 const getQueueUrl = async (req, res, next) => {
-    const queueName = req.body.queueName;
+    const queueName = req.query.queueName;
     try {
         if (!queueName) throw new Error('missing queue name in the request');
         req.queueName = queueName;
