@@ -1,8 +1,8 @@
-const { sqs, getFifoQueueUrl } = require('../utils/sqs');
+const { sqs, getStandardQueueUrl } = require('../utils/sqs');
 
 const doesQueueExist = async (req, res, next) => {
     try {
-        await getFifoQueueUrl(req.queueName);
+        await getStandardQueueUrl(req.queueName);
 
         throw new Error('queue already exists');
     } catch (err) {
@@ -22,7 +22,7 @@ const getQueueUrl = async (req, res, next) => {
     try {
         if (!queueName) throw new Error('missing queue name in the request');
         req.queueName = queueName;
-        req.queueUrl = await getFifoQueueUrl(queueName);
+        req.queueUrl = await getStandardQueueUrl(queueName);
         next();
     } catch (err) {
         let errMessage = err.message;
@@ -38,11 +38,11 @@ const getQueueUrl = async (req, res, next) => {
 const createQueue = async (req, res, next) => {
     try {
         const data = await sqs.createQueue({
-            QueueName: `${req.queueName}.fifo`,
-            Attributes: {
-                FifoQueue: 'true',
-                // ContentBasedDeduplication: 'true'
-            }
+            QueueName: `${req.queueName}`
+            // Attributes: {
+            //     FifoQueue: 'true',
+            //     // ContentBasedDeduplication: 'true'
+            // }
         }).promise();
         req.queueUrl = data.QueueUrl; // Do this in redis
 
@@ -57,9 +57,6 @@ const createQueue = async (req, res, next) => {
 }
 
 const sendMessageToQueue = async (req, res, next) => {
-    let MessageDeduplicationId = `${req.rootUrl},0,0`;
-    deduplicationLength = MessageDeduplicationId.length;
-    if (deduplicationLength > 128) MessageDeduplicationId = MessageDeduplicationId.slice(deduplicationLength - 128);
     try {
         await sqs.sendMessage({
             QueueUrl: req.queueUrl,
@@ -73,9 +70,7 @@ const sendMessageToQueue = async (req, res, next) => {
                     StringValue: '0'
                 }
             },
-            MessageBody: req.rootUrl,
-            MessageDeduplicationId,
-            MessageGroupId: '0' // Root url level is 0
+            MessageBody: req.rootUrl
         }).promise();
 
         next();

@@ -5,9 +5,10 @@ const sqs = new AWS.SQS({
     region: process.env.AWS_REGION
 });
 
-const getFifoQueueUrl = async (QueueName) => {
-    if (QueueName.slice(QueueName.length - 5) !== '.fifo') QueueName += '.fifo';
+const getStandardQueueUrl = async (QueueName) => {
     try {
+        if (QueueName.slice(QueueName.length - 5) === '.fifo') throw new Error('queue name cannot end with .fifo');
+
         const data = await sqs.getQueueUrl({
             QueueName
         }).promise();
@@ -30,4 +31,4 @@ const deleteQueue = async (QueueUrl) => {
     }
 }
 
-module.exports = { sqs, getFifoQueueUrl, deleteQueue };
+module.exports = { sqs, getStandardQueueUrl, deleteQueue };
