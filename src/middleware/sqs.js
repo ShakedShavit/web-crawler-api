@@ -1,8 +1,8 @@
-const { sqs, getStandardQueueUrl } = require('../utils/sqs');
+const { sqs, getFifoQueueUrl } = require('../utils/sqs');
 
 const doesQueueExist = async (req, res, next) => {
     try {
-        await getStandardQueueUrl(req.queueName);
+        await getFifoQueueUrl(req.queueName);
 
         throw new Error('queue already exists');
     } catch (err) {
@@ -22,7 +22,7 @@ const getQueueUrl = async (req, res, next) => {
     try {
         if (!queueName) throw new Error('missing queue name in the request');
         req.queueName = queueName;
-        req.queueUrl = await getStandardQueueUrl(queueName);
+        req.queueUrl = await getFifoQueueUrl(queueName);
         next();
     } catch (err) {
         let errMessage = err.message;
@@ -38,13 +38,13 @@ const getQueueUrl = async (req, res, next) => {
 const createQueue = async (req, res, next) => {
     try {
         const data = await sqs.createQueue({
-            QueueName: `${req.queueName}`
-            // Attributes: {
-            //     FifoQueue: 'true',
-            //     // ContentBasedDeduplication: 'true'
-            // }
+            QueueName: `${req.queueName}.fifo`,
+            Attributes: {
+                FifoQueue: 'true',
+                // ContentBasedDeduplication: 'true'
+            }
         }).promise();
-        req.queueUrl = data.QueueUrl; // Do this in redis
+        req.queueUrl = data.QueueUrl;
 
         next();
     } catch (err) {
@@ -70,7 +70,9 @@ const sendMessageToQueue = async (req, res, next) => {
                     StringValue: '0'
                 }
             },
-            MessageBody: req.rootUrl
+            MessageBody: req.rootUrl,
+            MessageGroupId: '0', // Every message should have the same group ID
+            MessageDeduplicationId: '0'
         }).promise();
 
         next();
