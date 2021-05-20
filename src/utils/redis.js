@@ -22,6 +22,28 @@ const setHashInRedis = async (key, hash) => {
     }
 }
 
+const doesKeyExistInRedis = async (key) => {
+    try {
+        const doesKeyExist = await redisClient.existsAsync(key);
+        return doesKeyExist;
+    } catch (err) {
+        throw new Error(err.message);
+    }
+}
+
+const setHashStrValInRedis = async (hashKey, field, value) => {
+    try {
+        const doesKeyExist = await doesKeyExistInRedis(hashKey);
+        if (!doesKeyExist) throw new Error('key does not exist in redis');
+
+        if (typeof value !== 'string') throw new Error(`value's type must be string. value (${value}) input is of type ${typeof value}`);
+
+        await redisClient.hsetAsync(hashKey, field, value);
+    } catch (err) {
+        throw new Error(err.message);
+    }
+}
+
 const appendElementsToListInRedis = async (key, elementsArr) => {
     try {
         await redisClient.rpushAsync(key, ...elementsArr);
@@ -30,11 +52,34 @@ const appendElementsToListInRedis = async (key, elementsArr) => {
     }
 }
 
+const getElementsFromListInRedis = async (key, start = 0, end = -1) => {
+    try {
+        return await redisClient.lrangeAsync(key, start, end);
+    } catch (err) {
+        throw new Error(err.message);
+    }
+}
+
+const trimListInRedis = async (key, start = 0, end = -1) => {
+    try {
+        await redisClient.ltrimAsync(key, start, end);
+    } catch (err) {
+        throw new Error(err.message);
+    }
+}
+
+
 const removeElementFromListInRedis = async (key, element, count = 0) => {
     try {
-        console.log(key, count, element)
-        let a = await redisClient.lremAsync(key, count, element);
-        console.log(a);
+        await redisClient.lremAsync(key, count, element);
+    } catch (err) {
+        throw new Error(err.message);
+    }
+}
+
+const getHashValueFromRedis = async (hashKey, field) => {
+    try {
+        return await redisClient.hgetAsync(hashKey, field);
     } catch (err) {
         throw new Error(err.message);
     }
@@ -42,11 +87,8 @@ const removeElementFromListInRedis = async (key, element, count = 0) => {
 
 const getHashValuesFromRedis = async (hashKey, fieldsArr) => {
     try {
-        const values = await redisClient.hmgetAsync(hashKey, ...fieldsArr);
-        console.log(values, '9');
-        return values;
+        return await redisClient.hmgetAsync(hashKey, ...fieldsArr);
     } catch (err) {
-        console.log(err.message, '12');
         throw new Error(err.message);
     }
 }
@@ -54,7 +96,10 @@ const getHashValuesFromRedis = async (hashKey, fieldsArr) => {
 module.exports = {
     deleteKeysInRedis,
     setHashInRedis,
+    setHashStrValInRedis,
     appendElementsToListInRedis,
+    getElementsFromListInRedis,
+    trimListInRedis,
     removeElementFromListInRedis,
-    getHashValuesFromRedis
+    getHashValueFromRedis
 }

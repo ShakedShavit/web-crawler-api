@@ -6,9 +6,10 @@ const {
     setHashInRedis,
     appendElementsToListInRedis,
     removeElementFromListInRedis,
-    getHashValuesFromRedis
+    getHashValueFromRedis
 } = require('../utils/redis');
 const { deleteQueue } = require('../utils/sqs');
+const getAndUpdateCrawlTree = require('../utils/updateCrawlTree');
 
 const router = new express.Router();
 
@@ -17,6 +18,9 @@ const redisQueueListKey = 'queue-url-list';
 const getHashKeyForQueueUrl = (queueUrl) => {
     return `queue-workers:${queueUrl}`;
 }
+const getListKeyForQueueUrl = (queueUrl) => {
+    return `pages-list:${queueUrl}`;
+}
 
 router.post('/start-scraping', validateCrawlReqData, doesQueueExist, createQueue, sendMessageToQueue, async (req, res) => {
     const queueUrl = req.queueUrl;
@@ -24,6 +28,7 @@ router.post('/start-scraping', validateCrawlReqData, doesQueueExist, createQueue
     const maxPages = req.maxPages;
 
     const redisCrawlHashKey = getHashKeyForQueueUrl(queueUrl);
+    const redisTreeListKey = getListKeyForQueueUrl(queueUrl);
 
     const crawlHash = {
         workersCounter: 0,
@@ -42,13 +47,15 @@ router.post('/start-scraping', validateCrawlReqData, doesQueueExist, createQueue
 
     try {
         // Deletes hash and list just in case, if they don't exist (probably won't) than it won't do anything (faster than checking first if they exist)
-        await deleteKeysInRedis([redisCrawlHashKey]);
+        let deleteKeysPromise = deleteKeysInRedis([redisCrawlHashKey, redisTreeListKey]);
         // Set the hash for this crawl that all the workers that would handle it will share
-        await setHashInRedis(redisCrawlHashKey, crawlHash);
+        let setHashPromise = setHashInRedis(redisCrawlHashKey, crawlHash);
         // Add queue to redis list so crawlers will find it and process it
-        await appendElementsToListInRedis(redisQueueListKey, [queueUrl]);
+        let appendToListPromise = appendElementsToListInRedis(redisQueueListKey, [queueUrl]);
 
-        res.status(200).send(queueUrl);
+        Promise.all([deleteKeysPromise, setHashPromise, appendToListPromise]).then((values) => {
+            res.status(200).send(queueUrl);
+        });
     } catch (err) {
         try {
             await removeElementFromListInRedis(redisQueueListKey, queueUrl);
@@ -62,12 +69,12 @@ router.post('/start-scraping', validateCrawlReqData, doesQueueExist, createQueue
     }
 });
 
-const deleteQueueSequence = async (queueUrl, redisCrawlHashKey = getHashKeyForQueueUrl(queueUrl)) => {
+const deleteQueueSequence = async (queueUrl, redisCrawlHashKey = getHashKeyForQueueUrl(queueUrl), redisTreeListKey = getListKeyForQueueUrl(queueUrl)) => {
     let didDeletingInRedisSucceed = false;
     try {
         // Remove queue from redis list (removes all instances of the element unless specified differently)
         await removeElementFromListInRedis(redisQueueListKey, queueUrl);
-        await deleteKeysInRedis([redisCrawlHashKey]);
+        await deleteKeysInRedis([redisCrawlHashKey, redisTreeListKey]);
         didDeletingInRedisSucceed = true;
         await deleteQueue(queueUrl);
     } catch (err) {
@@ -83,15 +90,18 @@ const deleteQueueSequence = async (queueUrl, redisCrawlHashKey = getHashKeyForQu
 
 router.get('/get-tree', getQueueUrl, async (req, res) => {
     const redisCrawlHashKey = getHashKeyForQueueUrl(req.queueUrl);
+    const redisTreeListKey = getListKeyForQueueUrl(req.queueUrl);
 
     try {
-        let [isCrawlingDone, treeJSON] = await getHashValuesFromRedis(redisCrawlHashKey, ['isCrawlingDone', 'tree']);
+        const isCrawlingDone = await getHashValueFromRedis(redisCrawlHashKey, 'isCrawlingDone');
+        // let [isCrawlingDone, treeJSON] = await getHashValuesFromRedis(redisCrawlHashKey, ['isCrawlingDone', 'tree']);
 
+        const updatedTree = await getAndUpdateCrawlTree(redisCrawlHashKey, redisTreeListKey, 'tree');
         if (isCrawlingDone === 'true') {
-            await deleteQueueSequence(req.queueUrl, redisCrawlHashKey);
+            await deleteQueueSequence(req.queueUrl, redisCrawlHashKey, redisTreeListKey);
         }
         
-        res.status(200).send({tree: treeJSON, isCrawlingDone});
+        res.status(200).send({tree: updatedTree, isCrawlingDone});
     } catch (err) {
         console.log(err.message, '97');
 
