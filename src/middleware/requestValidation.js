@@ -1,6 +1,6 @@
 const validateCrawlReqData = (req, res, next) => {
     const queueName = req.body.queueName;
-    const rootUrl = req.body.rootUrl;
+    let rootUrl = req.body.rootUrl;
     const maxDepth = req.body.maxDepth;
     const maxPages = req.body.maxPages;
 
@@ -9,6 +9,7 @@ const validateCrawlReqData = (req, res, next) => {
         if (!rootUrl) throw new Error('missing message body in the request');
         if (!maxDepth && !maxPages) throw new Error('must include either max pages or max depth in the request (both missing)');
 
+        if (rootUrl[rootUrl.length - 1] === "/") rootUrl = rootUrl.slice(0, rootUrl.length - 1);
         req.queueName = queueName;
         req.rootUrl = rootUrl;
         req.maxDepth = maxDepth <= 0 ? null : maxDepth;

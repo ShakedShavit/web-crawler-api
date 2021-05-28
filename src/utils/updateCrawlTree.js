@@ -5,10 +5,27 @@ const {
     trimListInRedis
 } = require('./redis');
 
+// const getInsertPageIndex = (treeJSON, pageLevel, parentUrl) => {
+//     let stringJSON = treeJSON;
+//     const searchString = `"${parentUrl}","children":[`;
+//     let insertIndex = -1;
+//     const searchStringLen = searchString.length;
+//     while (true) {
+//         insertIndex = stringJSON.indexOf(searchString);
+//         if (insertIndex === -1) return -1; // If the tree is empty (first page insertion)
+
+//         let levelStartIndex = insertIndex - 2;
+//         while (stringJSON[levelStartIndex - 1] !== ":") levelStartIndex--;
+//         if (parseInt(stringJSON.substring(levelStartIndex, insertIndex)) === pageLevel - 1) return insertIndex + searchStringLen;
+
+//         stringJSON = stringJSON.slice(insertIndex += searchStringLen);
+//     }
+// }
+
 // Add new page obj directly to JSON formatted tree (without parsing it)
 const getUpdatedJsonTree = (treeJSON, newPageObj, parentUrl) => {
     let newPageJSON = JSON.stringify(newPageObj);
-    let searchString = `${parentUrl}","children":[`;
+    let searchString = `"${parentUrl}","children":[`;
     let insertIndex = treeJSON.indexOf(searchString);
     if (insertIndex === -1) return newPageJSON; // If the tree is empty (first page insertion)
     insertIndex += searchString.length;
@@ -18,9 +35,6 @@ const getUpdatedJsonTree = (treeJSON, newPageObj, parentUrl) => {
 
 const addNewPageToTree = (pageJSON, treeJSON) => {
     let pageObj = JSON.parse(pageJSON);
-    if (pageObj.level === 3) console.log(pageObj);
-    let isUrlInTree = treeJSON.includes(`,"url":"${pageObj.url}"`);
-    if (isUrlInTree) delete pageObj.children;
     let parentUrl = pageObj.parentUrl;
     delete pageObj.parentUrl;
 

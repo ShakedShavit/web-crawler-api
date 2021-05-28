@@ -18,8 +18,11 @@ const redisQueueListKey = 'queue-url-list';
 const getHashKeyForQueueUrl = (queueUrl) => {
     return `queue-workers:${queueUrl}`;
 }
-const getListKeyForQueueUrl = (queueUrl) => {
+const getPagesListKeyForQueueUrl = (queueUrl) => {
     return `pages-list:${queueUrl}`;
+}
+const getProcessesListKeyForQueueUrl = (queueUrl) => {
+    return `curr-processes-list:${queueUrl}`;
 }
 
 router.post('/start-scraping', validateCrawlReqData, doesQueueExist, createQueue, sendMessageToQueue, async (req, res) => {
@@ -28,7 +31,7 @@ router.post('/start-scraping', validateCrawlReqData, doesQueueExist, createQueue
     const maxPages = req.maxPages;
 
     const redisCrawlHashKey = getHashKeyForQueueUrl(queueUrl);
-    const redisTreeListKey = getListKeyForQueueUrl(queueUrl);
+    const redisTreeListKey = getPagesListKeyForQueueUrl(queueUrl);
 
     const crawlHash = {
         workersCounter: 0,
@@ -47,7 +50,7 @@ router.post('/start-scraping', validateCrawlReqData, doesQueueExist, createQueue
 
     try {
         // Deletes hash and list just in case, if they don't exist (probably won't) than it won't do anything (faster than checking first if they exist)
-        let deleteKeysPromise = deleteKeysInRedis([redisCrawlHashKey, redisTreeListKey]);
+        let deleteKeysPromise = deleteKeysInRedis([redisCrawlHashKey, redisTreeListKey, getProcessesListKeyForQueueUrl(queueUrl)]);
         // Set the hash for this crawl that all the workers that would handle it will share
         let setHashPromise = setHashInRedis(redisCrawlHashKey, crawlHash);
         // Add queue to redis list so crawlers will find it and process it
@@ -69,12 +72,12 @@ router.post('/start-scraping', validateCrawlReqData, doesQueueExist, createQueue
     }
 });
 
-const deleteQueueSequence = async (queueUrl, redisCrawlHashKey = getHashKeyForQueueUrl(queueUrl), redisTreeListKey = getListKeyForQueueUrl(queueUrl)) => {
+const deleteQueueSequence = async (queueUrl, redisCrawlHashKey = getHashKeyForQueueUrl(queueUrl), redisTreeListKey = getPagesListKeyForQueueUrl(queueUrl), redisProcessesListKey = getProcessesListKeyForQueueUrl(queueUrl)) => {
     let didDeletingInRedisSucceed = false;
     try {
         // Remove queue from redis list (removes all instances of the element unless specified differently)
         await removeElementFromListInRedis(redisQueueListKey, queueUrl);
-        await deleteKeysInRedis([redisCrawlHashKey, redisTreeListKey]);
+        await deleteKeysInRedis([redisCrawlHashKey, redisTreeListKey, redisProcessesListKey]);
         didDeletingInRedisSucceed = true;
         await deleteQueue(queueUrl);
     } catch (err) {
@@ -90,7 +93,7 @@ const deleteQueueSequence = async (queueUrl, redisCrawlHashKey = getHashKeyForQu
 
 router.get('/get-tree', getQueueUrl, async (req, res) => {
     const redisCrawlHashKey = getHashKeyForQueueUrl(req.queueUrl);
-    const redisTreeListKey = getListKeyForQueueUrl(req.queueUrl);
+    const redisTreeListKey = getPagesListKeyForQueueUrl(req.queueUrl);
 
     try {
         const isCrawlingDone = await getHashValueFromRedis(redisCrawlHashKey, 'isCrawlingDone');
