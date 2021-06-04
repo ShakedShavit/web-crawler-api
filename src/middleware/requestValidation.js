@@ -1,4 +1,7 @@
-const validateCrawlReqData = (req, res, next) => {
+const { crawlListKey } = require('../utils/getRedisKeys');
+const { getIndexOfElementInListInRedis } = require('../utils/redis');
+
+const validateCrawlReqData = async (req, res, next) => {
     const queueName = req.body.queueName;
     let rootUrl = req.body.rootUrl;
     const maxDepth = req.body.maxDepth;
@@ -9,6 +12,9 @@ const validateCrawlReqData = (req, res, next) => {
         if (!rootUrl) throw new Error('missing message body in the request');
         if (!maxDepth && !maxPages) throw new Error('must include either max pages or max depth in the request (both missing)');
 
+        const index = await getIndexOfElementInListInRedis(crawlListKey, queueName);
+        if (index != null) throw new Error('queue name is taken');
+
         if (rootUrl[rootUrl.length - 1] === "/") rootUrl = rootUrl.slice(0, rootUrl.length - 1);
         req.queueName = queueName;
         req.rootUrl = rootUrl;
@@ -17,7 +23,7 @@ const validateCrawlReqData = (req, res, next) => {
 
         next();
     } catch (err) {
-        console.log(err.message);
+        console.log(err.message, '25');
         res.status(400).send({
             status: 400,
             message: err.message

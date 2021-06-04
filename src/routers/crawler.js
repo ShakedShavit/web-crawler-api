@@ -12,10 +12,7 @@ const {
     removeElementFromListInRedis,
     getHashValuesFromRedis
 } = require('../utils/redis');
-const updateCrawlTree = require('../utils/updateCrawlTree');
-const {
-    deleteCrawlSequence
-} = require('../utils/deletingSequences');
+const deleteCrawlSequence = require('../utils/deletingSequences');
 const {
     crawlListKey,
     getHashKeyForCrawl,
@@ -65,7 +62,6 @@ router.post('/start-scraping', validateCrawlReqData, doesQueueExist, createQueue
         })]);
 
         await Promise.all([deleteKeysPromise, setHashPromise, appendToCrawlsListPromise, appendToBfsListPromise]).then((values) => {
-            // updateCrawlTree(queueName);
             console.log(values[1]);
             res.status(200).send();
         });
@@ -84,13 +80,15 @@ router.post('/start-scraping', validateCrawlReqData, doesQueueExist, createQueue
 
 router.get('/get-tree', async (req, res) => {
     try {
-        // let crawlInfo = await getAndUpdateCrawlTree(req.query.queueName);
         let hashKey = getHashKeyForCrawl(req.query.queueName);
         let [isCrawlingDone, tree] = await getHashValuesFromRedis(hashKey, ['isCrawlingDone', 'tree']);
         isCrawlingDone = isCrawlingDone === "true";
         if (isCrawlingDone) await deleteCrawlSequence(req.query.queueName);
 
-        res.status(200).send({ tree, isCrawlingDone });
+        res.status(200).send({
+            tree,
+            isCrawlingDone
+        });
     } catch (err) {
         console.log(err.message, '97');
         res.status(400).send({

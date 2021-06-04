@@ -5,22 +5,6 @@ const sqs = new AWS.SQS({
     region: process.env.AWS_REGION
 });
 
-const createQueue = async (queueName, currentLevel) => {
-    try {
-        const data = await sqs.createQueue({
-            QueueName: `${queueName}${currentLevel}.fifo`,
-            Attributes: {
-                FifoQueue: 'true',
-                // ContentBasedDeduplication: 'true'
-            }
-        }).promise();
-        return data.QueueUrl;
-    } catch (err) {
-        console.log(err.message, "\n\nqueueName + currentLevel:", queueName + currentLevel);
-        throw new Error(err.message);
-    }
-}
-
 const getFifoQueueUrl = async (QueueName) => {
     if (QueueName.slice(QueueName.length - 5) !== '.fifo') QueueName += '.fifo';
     try {
@@ -43,4 +27,4 @@ const deleteQueue = async (QueueUrl) => {
     }
 }
 
-module.exports = { sqs, createQueue, getFifoQueueUrl, deleteQueue };
+module.exports = { sqs, getFifoQueueUrl, deleteQueue };

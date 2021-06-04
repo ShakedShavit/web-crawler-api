@@ -117,10 +117,17 @@ const popFirstElementOfListInRedis = async (key) => {
     }
 }
 
-
 const removeElementFromListInRedis = async (key, element, count = 0) => {
     try {
         return redisClient.lremAsync(key, count, element);
+    } catch (err) {
+        throw new Error(err.message);
+    }
+}
+
+const getIndexOfElementInListInRedis = async (key, element) => {
+    try {
+        return await redisClient.lposAsync(key, element);
     } catch (err) {
         throw new Error(err.message);
     }
@@ -138,5 +145,6 @@ module.exports = {
     getElementsFromListInRedis,
     trimListInRedis,
     popFirstElementOfListInRedis,
-    removeElementFromListInRedis
+    removeElementFromListInRedis,
+    getIndexOfElementInListInRedis
 }
