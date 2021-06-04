@@ -1,67 +1,77 @@
 const express = require('express');
 const validateCrawlReqData = require('../middleware/requestValidation');
-const { doesQueueExist, getQueueUrl, createQueue, sendMessageToQueue } = require('../middleware/sqs');
+const {
+    doesQueueExist,
+    createQueue,
+    sendMessageToQueue
+} = require('../middleware/sqs');
 const {
     deleteKeysInRedis,
     setHashInRedis,
     appendElementsToListInRedis,
     removeElementFromListInRedis,
-    getHashValueFromRedis
+    getHashValuesFromRedis
 } = require('../utils/redis');
-const { deleteQueue } = require('../utils/sqs');
-const getAndUpdateCrawlTree = require('../utils/updateCrawlTree');
+const updateCrawlTree = require('../utils/updateCrawlTree');
+const {
+    deleteCrawlSequence
+} = require('../utils/deletingSequences');
+const {
+    crawlListKey,
+    getHashKeyForCrawl,
+    getPagesListKeyForCrawl,
+    getBfsUrlsListKeyForCrawl
+} = require('../utils/getRedisKeys');
 
 const router = new express.Router();
 
-const redisQueueListKey = 'queue-url-list';
-
-const getHashKeyForQueueUrl = (queueUrl) => {
-    return `queue-workers:${queueUrl}`;
-}
-const getPagesListKeyForQueueUrl = (queueUrl) => {
-    return `pages-list:${queueUrl}`;
-}
-const getProcessesListKeyForQueueUrl = (queueUrl) => {
-    return `curr-processes-list:${queueUrl}`;
-}
-
 router.post('/start-scraping', validateCrawlReqData, doesQueueExist, createQueue, sendMessageToQueue, async (req, res) => {
-    const queueUrl = req.queueUrl;
-    const maxDepth = req.maxDepth;
-    const maxPages = req.maxPages;
-
-    const redisCrawlHashKey = getHashKeyForQueueUrl(queueUrl);
-    const redisTreeListKey = getPagesListKeyForQueueUrl(queueUrl);
-
+    const {
+        currQueueUrl,
+        nextQueueUrl,
+        queueName,
+        maxDepth,
+        maxPages
+    } = req;
+    const redisCrawlHashKey = getHashKeyForCrawl(queueName);
+    const redisTreeListKey = getPagesListKeyForCrawl(queueName);
+    const redisBfsUrlsListKey = getBfsUrlsListKeyForCrawl(queueName);
     const crawlHash = {
-        workersCounter: 0,
         isCrawlingDone: false,
         currentLevel: 0,
         pageCounter: 0,
-        workersReachedNextLevelCounter: 0,
+        lvlPageCounter: 0,
+        currLvlLinksLen: 1,
+        nextLvlLinksLen: 0,
+        currQueueUrl,
+        nextQueueUrl,
         tree: ''
     };
-
     if (!!maxDepth) crawlHash.maxDepth = maxDepth;
-    if (!!maxPages) {
-        crawlHash.maxPages = maxPages;
-        crawlHash.pageCounter = 0;
-    }
+    if (!!maxPages) crawlHash.maxPages = maxPages;
 
     try {
         // Deletes hash and list just in case, if they don't exist (probably won't) than it won't do anything (faster than checking first if they exist)
-        let deleteKeysPromise = deleteKeysInRedis([redisCrawlHashKey, redisTreeListKey, getProcessesListKeyForQueueUrl(queueUrl)]);
+        let deleteKeysPromise = deleteKeysInRedis([redisCrawlHashKey, redisTreeListKey, redisBfsUrlsListKey]);
         // Set the hash for this crawl that all the workers that would handle it will share
         let setHashPromise = setHashInRedis(redisCrawlHashKey, crawlHash);
         // Add queue to redis list so crawlers will find it and process it
-        let appendToListPromise = appendElementsToListInRedis(redisQueueListKey, [queueUrl]);
+        let appendToCrawlsListPromise = appendElementsToListInRedis(crawlListKey, [queueName]);
+        // Add first parentUrl to urls bfs queue
+        let appendToBfsListPromise = appendElementsToListInRedis(redisBfsUrlsListKey, [JSON.stringify({
+            url: "0",
+            linksLength: 1,
+            childrenCounter: 0
+        })]);
 
-        Promise.all([deleteKeysPromise, setHashPromise, appendToListPromise]).then((values) => {
-            res.status(200).send(queueUrl);
+        await Promise.all([deleteKeysPromise, setHashPromise, appendToCrawlsListPromise, appendToBfsListPromise]).then((values) => {
+            // updateCrawlTree(queueName);
+            console.log(values[1]);
+            res.status(200).send();
         });
     } catch (err) {
         try {
-            await removeElementFromListInRedis(redisQueueListKey, queueUrl);
+            await removeElementFromListInRedis(crawlListKey, queueName);
         } catch (error) {
             console.log(error, '52');
             res.status(400).send(error.message);
@@ -72,42 +82,17 @@ router.post('/start-scraping', validateCrawlReqData, doesQueueExist, createQueue
     }
 });
 
-const deleteQueueSequence = async (queueUrl, redisCrawlHashKey = getHashKeyForQueueUrl(queueUrl), redisTreeListKey = getPagesListKeyForQueueUrl(queueUrl), redisProcessesListKey = getProcessesListKeyForQueueUrl(queueUrl)) => {
-    let didDeletingInRedisSucceed = false;
+router.get('/get-tree', async (req, res) => {
     try {
-        // Remove queue from redis list (removes all instances of the element unless specified differently)
-        await removeElementFromListInRedis(redisQueueListKey, queueUrl);
-        await deleteKeysInRedis([redisCrawlHashKey, redisTreeListKey, redisProcessesListKey]);
-        didDeletingInRedisSucceed = true;
-        await deleteQueue(queueUrl);
-    } catch (err) {
-        if (didDeletingInRedisSucceed) throw new Error('deleting queue in sqs failed');
-        try {
-            await deleteQueue(queueUrl);
-            throw new Error('deleting related data in redis has failed');
-        } catch (error) {
-            throw new Error('failed to delete related data in redis, and to delete queue in sqs');
-        }
-    }
-}
+        // let crawlInfo = await getAndUpdateCrawlTree(req.query.queueName);
+        let hashKey = getHashKeyForCrawl(req.query.queueName);
+        let [isCrawlingDone, tree] = await getHashValuesFromRedis(hashKey, ['isCrawlingDone', 'tree']);
+        isCrawlingDone = isCrawlingDone === "true";
+        if (isCrawlingDone) await deleteCrawlSequence(req.query.queueName);
 
-router.get('/get-tree', getQueueUrl, async (req, res) => {
-    const redisCrawlHashKey = getHashKeyForQueueUrl(req.queueUrl);
-    const redisTreeListKey = getPagesListKeyForQueueUrl(req.queueUrl);
-
-    try {
-        const isCrawlingDone = await getHashValueFromRedis(redisCrawlHashKey, 'isCrawlingDone');
-        // let [isCrawlingDone, treeJSON] = await getHashValuesFromRedis(redisCrawlHashKey, ['isCrawlingDone', 'tree']);
-
-        const updatedTree = await getAndUpdateCrawlTree(redisCrawlHashKey, redisTreeListKey, 'tree');
-        if (isCrawlingDone === 'true') {
-            await deleteQueueSequence(req.queueUrl, redisCrawlHashKey, redisTreeListKey);
-        }
-        
-        res.status(200).send({tree: updatedTree, isCrawlingDone});
+        res.status(200).send({ tree, isCrawlingDone });
     } catch (err) {
         console.log(err.message, '97');
-
         res.status(400).send({
             status: 400,
             message: err.message
@@ -115,9 +100,9 @@ router.get('/get-tree', getQueueUrl, async (req, res) => {
     }
 });
 
-router.delete('/delete-queue', getQueueUrl, async (req, res) => {
+router.delete('/delete-queue', async (req, res) => {
     try {
-        await deleteQueueSequence(req.queueUrl);
+        await deleteCrawlSequence(req.query.queueName);
         res.status(200).send();
     } catch (err) {
         console.log(err.message, '110');
